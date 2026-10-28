@@ -11,6 +11,8 @@ Production-grade, self-healing Frida hook persistence and supervision framework 
 * **Self-Healing on App Restarts**: If the target system app (`com.voyah.car`, `com.voyah.os.carlauncher`, etc.) crashes, is killed, or restarts, the supervisor detects the new PID and re-injects within 5 seconds.
 * **Automotive Bootloop Safety**:
   * **Boot Gate**: Waits for `sys.boot_completed == 1` + 20s settle delay to prevent early-boot race conditions.
+  * **Process Health Guard**: Verifies target process state is `S` (sleep) or `R` (running) and uptime $\ge$ 8s before injecting, avoiding half-initialized states.
+  * **OOM-Cleaner Avoidance**: Detects Voyah's background cleaner (`com.voyah.cleanoptimization`) alarm schedule via `dumpsys alarm` and postpones injection if a cleanup cycle is due in $<15$s.
   * **Circuit Breaker**: Detects rapid target app deaths ($<15$s). If a hook causes 3 consecutive crashes, it trips and halts auto-injection for that specific hook only (`.tripped`).
   * **Safe Memory Management**: Avoids pinning `-1000` OOM immunity on injectors, allowing the Linux LowMemoryKiller (LMK) to drop Frida scripts gracefully rather than killing critical car safety systems.
   * **Emergency Killswitch**: Touch `/data/local/tmp/voyahmods.disable` to immediately halt all persistent injection.
