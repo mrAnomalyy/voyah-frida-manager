@@ -41,7 +41,35 @@ trim_log() {
     fi
 }
 
-# 5. Supervisor Loop
+# 5. Health & Safety Checks
+is_clean_imminent() {
+    # Check if a Voyah cleanup cycle is scheduled within the next 15 seconds
+    _alarm=$(dumpsys alarm 2>/dev/null | grep -A 2 'tag=\*alarm\*:com.voyah.cleanup' | grep -o 'whenElapsed=[^ ]*' | head -n 1)
+    _val=$(echo "$_alarm" | cut -d= -f2)
+    case "$_val" in
+        *m*|*h*|*d*)
+            # Scheduled minutes or hours ahead -> safe
+            return 1
+            ;;
+        *s*)
+            # Seconds remaining (e.g. +8s200ms) -> extract seconds digits
+            _sec=$(echo "$_val" | tr -dc '0-9' | head -c 2)
+            if [ -n "$_sec" ] && [ "$_sec" -lt 15 ]; then
+                return 0
+            fi
+            return 1
+            ;;
+        *ms*)
+            # Only milliseconds remaining (<1s) -> imminent!
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# 6. Supervisor Loop
 while true; do
     # Immediate exit if killswitch appears
     if [ -f "$KILLSWITCH" ] || [ -f "$GLOBAL_KILLSWITCH" ]; then
@@ -119,6 +147,32 @@ while true; do
 
         # Re-inject if target restarted or injector dropped
         if [ "$is_running" = "0" ]; then
+            # Health Check 1: Target process state (must be S or R, not Z, D, or T)
+            proc_stat="/proc/$target_pid/stat"
+            if [ ! -f "$proc_stat" ]; then
+                continue
+            fi
+            proc_state=$(cut -d' ' -f3 "$proc_stat" 2>/dev/null)
+            if [ "$proc_state" != "S" ] && [ "$proc_state" != "R" ]; then
+                echo "[$TAG] Skipping $hook_name: target ($target_pkg, PID $target_pid) state is '$proc_state' (not ready)" >> "$STATE_DIR/supervisor.log"
+                continue
+            fi
+
+            # Health Check 2: Minimum process age (must be alive >= 8s to let ART runtime stabilize)
+            uptime_sec=$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0)
+            start_ticks=$(cut -d' ' -f22 "$proc_stat" 2>/dev/null || echo 0)
+            proc_age=$(( uptime_sec - (start_ticks / 100) ))
+            if [ "$proc_age" -lt 8 ]; then
+                # Target is too young; give it time to load classes and establish IPC
+                continue
+            fi
+
+            # Health Check 3: Imminent OOM/Clean task (<15s)
+            if is_clean_imminent; then
+                echo "[$TAG] Postponing $hook_name injection: cleanup cycle is imminent (<15s)" >> "$STATE_DIR/supervisor.log"
+                continue
+            fi
+
             crashes=$(cat "$crash_file" 2>/dev/null || echo 0)
 
             # Crash detection: did target die within 15 seconds of previous injection?
