@@ -8,6 +8,7 @@ STATE_DIR="/data/local/tmp/voyahmods_state"
 KILLSWITCH="/data/local/tmp/voyahmods.disable"
 GLOBAL_KILLSWITCH="/data/local/voyahmods/disable"
 FRIDA_INJECT="/data/local/voyahmods/frida-inject-15"
+NOSELINUX_SO="/data/local/voyahmods/libnoselinux.so"
 MAX_CRASHES=3
 SETTLE_SECONDS=20
 
@@ -26,7 +27,10 @@ done
 sleep "$SETTLE_SECONDS"
 
 # 3. Ensure Environment
-setenforce 0 2>/dev/null
+if [ "$(getenforce 2>/dev/null)" != "Permissive" ]; then
+    setenforce 0 2>/dev/null
+fi
+auditctl -r 1 2>/dev/null
 export TMPDIR=/data/local/tmp
 
 echo "[$TAG] Supervisor initialized at $(date)" >> "$STATE_DIR/supervisor.log"
@@ -207,7 +211,13 @@ while true; do
             echo "$target_pid" > "$pid_tracker"
             echo "$now" > "$last_inj_time_file"
 
-            nohup env TMPDIR=/data/local/tmp "$FRIDA_INJECT" -p "$target_pid" -s "$script_file" </dev/null >> "$STATE_DIR/$hook_name.log" 2>&1 &
+            # Skip frida_selinux_patch_policy() when SELinux is already Permissive to prevent
+            # kernel selinuxfs rebuild races (Unknown class service_manager -> DeadSystemException)
+            if [ -f "$NOSELINUX_SO" ] && [ "$(getenforce 2>/dev/null)" = "Permissive" ]; then
+                nohup env TMPDIR=/data/local/tmp LD_PRELOAD="$NOSELINUX_SO" "$FRIDA_INJECT" -p "$target_pid" -s "$script_file" </dev/null >> "$STATE_DIR/$hook_name.log" 2>&1 &
+            else
+                nohup env TMPDIR=/data/local/tmp "$FRIDA_INJECT" -p "$target_pid" -s "$script_file" </dev/null >> "$STATE_DIR/$hook_name.log" 2>&1 &
+            fi
             inj_pid=$!
             echo "$inj_pid" > "$inj_pid_file"
         fi

@@ -13,6 +13,7 @@ Production-grade, self-healing Frida hook persistence and supervision framework 
   * **Boot Gate**: Waits for `sys.boot_completed == 1` + 20s settle delay to prevent early-boot race conditions.
   * **Process Health Guard**: Verifies target process state is `S` (sleep) or `R` (running) and uptime $\ge$ 8s before injecting, avoiding half-initialized states.
   * **OOM-Cleaner Avoidance**: Detects Voyah's background cleaner (`com.voyah.cleanoptimization`) alarm schedule via `dumpsys alarm` and postpones injection if a cleanup cycle is due in $<15$s.
+  * **SELinux Reload Guard (`libnoselinux.so`)**: Uses a tiny `LD_PRELOAD` shim (leaving the official `frida-inject-15` binary unmodified) plus conditional `setenforce 0` and `auditctl -r 1` so re-injections under `Permissive` mode do not trigger kernel SELinux policy reloads (`selinuxfs` rebuild race → `servicemanager` `Unknown class` → `system_server` `DeadSystemException`). Inside its constructor it immediately runs `unsetenv("LD_PRELOAD")` so child helpers stay unaffected.
   * **Circuit Breaker**: Detects rapid target app deaths ($<15$s). If a hook causes 3 consecutive crashes, it trips and halts auto-injection for that specific hook only (`.tripped`).
   * **Safe Memory Management**: Avoids pinning `-1000` OOM immunity on injectors, allowing the Linux LowMemoryKiller (LMK) to drop Frida scripts gracefully rather than killing critical car safety systems.
   * **Emergency Killswitch**: Touch `/data/local/tmp/voyahmods.disable` to immediately halt all persistent injection.
@@ -29,7 +30,10 @@ frida-manager/
 ├── deploy_hook.sh              # Host CLI to deploy a new hook (.js + .target)
 ├── status.sh                   # Host CLI to check live daemon and hook states
 ├── bin/
-│   └── frida-inject-15         # Precompiled arm64-v8a Frida injection binary
+│   ├── frida-inject-15         # Precompiled arm64-v8a Frida injection binary (unmodified)
+│   └── libnoselinux.so         # Tiny arm64 LD_PRELOAD shim blocking redundant SELinux policy reloads
+├── src/
+│   └── noselinux.c             # C source for libnoselinux.so (NDK API 30)
 ├── device/
 │   ├── supervisor.sh           # Master supervisor running on head unit
 │   ├── boot_hook.sh            # Boot trigger placed in boot-hooks.d
