@@ -87,6 +87,7 @@ done
 | **Уровень 2** | **Аварийный выключатель (Killswitch)** | Если существует `/data/local/tmp/voyahmods.disable`, немедленный выход. | Мгновенная остановка работы менеджера через ADB или push файла без ввода сложных команд. |
 | **Уровень 3** | **Автомат защиты (Circuit Breaker)** | Фиксация времени инъекций. Если целевой процесс падает быстрее 15 секунд 3 раза подряд, выставляется флаг `<name>.tripped` и автоинъекция останавливается. | Предотвращает шторм падений и перезапусков («crash loop») при ошибке в JS-скрипте. Остальные хуки продолжают работать. |
 | **Уровень 4** | **Приоритет памяти (RAM Safety)** | Стандартный `oom_score_adj` (без фиксации значения `-1000`). | При экстремальной нехватке памяти (360° камеры, задний ход) ядро Android может безопасно закрыть Frida, не убивая жизненно важные блоки авто. |
+| **Уровень 5** | **Защита от перезагрузки SELinux и флуда аудита** | Условный вызов `setenforce 0` (только если режим != `Permissive`), `auditctl -r 1` и запуск `frida-inject-15` с `LD_PRELOAD=libnoselinux.so` (подменяет `/sys/fs/selinux/policy` и `/sys/fs/selinux/load` на `ENOENT` и сразу сбрасывает `unsetenv("LD_PRELOAD")`). | Предотвращает регулярные вызовы `frida_selinux_patch_policy()` при рестартах `com.voyah.car` раз в 5 минут от штатного клинера `com.voyah.cleanoptimization`. Исключает гонку `sel_make_policy_nodes()` в ядре (`servicemanager: Unknown class service_manager` → `system_server DeadSystemException` soft reboot) без модификации оригинального бинарника `frida-inject-15`. |
 
 ---
 

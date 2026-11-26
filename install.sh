@@ -7,6 +7,7 @@ SUPERVISOR_SRC="$SCRIPT_DIR/device/supervisor.sh"
 BOOT_HOOK_SRC="$SCRIPT_DIR/device/boot_hook.sh"
 TOGGLE_ROOT_SRC="$SCRIPT_DIR/device/toggle_adb_root.sh"
 FRIDA_BIN_SRC="$SCRIPT_DIR/bin/frida-inject-15"
+NOSELINUX_SRC="$SCRIPT_DIR/bin/libnoselinux.so"
 
 echo "=========================================================="
 echo "  Voyah Frida Manager — Installation"
@@ -76,6 +77,13 @@ if [ "$FRIDA_EXISTS" != "1" ]; then
     echo "[*] Deploying frida-inject-15 to /data/local/voyahmods/..."
     adb -s "$ADB_SERIAL" push "$FRIDA_BIN_SRC" /data/local/voyahmods/frida-inject-15
     adb -s "$ADB_SERIAL" shell "chmod 755 /data/local/voyahmods/frida-inject-15"
+fi
+
+# 5b. Push libnoselinux.so LD_PRELOAD shim (prevents kernel SELinux policy reloads on re-inject)
+if [ -f "$NOSELINUX_SRC" ]; then
+    echo "[*] Deploying libnoselinux.so to /data/local/voyahmods/..."
+    adb -s "$ADB_SERIAL" push "$NOSELINUX_SRC" /data/local/voyahmods/libnoselinux.so >/dev/null
+    adb -s "$ADB_SERIAL" shell "chmod 755 /data/local/voyahmods/libnoselinux.so"
 fi
 
 # 6. Push supervisor script

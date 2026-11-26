@@ -40,9 +40,9 @@ sleep 1
 echo "[*] Removing boot hook /data/local/tmp/boot-hooks.d/60-voyahmods.sh..."
 adb -s "$ADB_SERIAL" shell "rm -f /data/local/tmp/boot-hooks.d/60-voyahmods.sh"
 
-# 7. Remove supervisor script
-echo "[*] Removing /data/local/voyahmods/supervisor.sh..."
-adb -s "$ADB_SERIAL" shell "rm -f /data/local/voyahmods/supervisor.sh"
+# 7. Remove supervisor script and LD_PRELOAD shim
+echo "[*] Removing /data/local/voyahmods/supervisor.sh and libnoselinux.so..."
+adb -s "$ADB_SERIAL" shell "rm -f /data/local/voyahmods/supervisor.sh /data/local/voyahmods/libnoselinux.so"
 
 # 8. Clean up state directory
 echo "[*] Removing state directory /data/local/tmp/voyahmods_state/..."
